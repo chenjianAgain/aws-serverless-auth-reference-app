@@ -60,12 +60,11 @@ export class ResourceAvailabilityPage {
   getBooking(timeslot) {
     // Date string manipulation to calculate the startTime that we'll match on
     let date = new Date(Date.parse(this.date));
-    let datestamp = "" + date.getFullYear() + "-" + (date.getMonth() < 9 ? "0" : "") + (date.getMonth() + 1) + (date.getDate() < 10 ? "0" : "") + "-" + date.getDate()
+    let datestamp = "" + date.getUTCFullYear() + "-" + (date.getUTCMonth() < 10 ? "0" : "") + (date.getUTCMonth() + 1) + "-" + (date.getUTCDate() < 10 ? "0" : "") + date.getUTCDate();
     let startTimeIsoTimestamp = datestamp + this.timeslotMappings[timeslot].start;
     let startTimeEpochTime = new Date(startTimeIsoTimestamp).getTime();
 
     // find the booking that matches that start time
-
     let index = this.bookings.findIndex(booking => {
       return booking.startTimeEpochTime === startTimeEpochTime
     });
@@ -118,7 +117,7 @@ export class ResourceAvailabilityPage {
 
       // Date string manipulation to calculate the startTime and endTime values, based on the timeslot. All dates are UTC.
       let date = new Date(Date.parse(this.date));
-      let datestamp = "" + date.getFullYear() + "-" + (date.getMonth() < 9 ? "0" : "") + (date.getMonth() + 1) + "-" + (date.getDate() < 10 ? "0" : "") + date.getDate()
+      let datestamp = "" + date.getUTCFullYear() + "-" + (date.getUTCMonth() < 9 ? "0" : "") + (date.getUTCMonth() + 1) + "-" + (date.getUTCDate() < 10 ? "0" : "") + date.getUTCDate()
       let startTimeIsoTimestamp = datestamp + this.timeslotMappings[timeslot].start;
       let endTimeIsoTimestamp = datestamp + this.timeslotMappings[timeslot].end;
 

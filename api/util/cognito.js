@@ -9,7 +9,8 @@ let userPools = new AWS.CognitoIdentityServiceProvider();
 
 let identityPoolName = config.getName('identityPool').replace(/-/g, '_');
 let userPoolName = config.getName('userPool');
-let userPoolClientName = userPoolName + '-client';
+let userPoolAdminClientName = userPoolName + '-admin-client';
+let userPoolAppClientName = userPoolName + '-app-client';
 let newUserTempPassword = 'Temp123!';
 
 function createUserPool() {
@@ -17,6 +18,23 @@ function createUserPool() {
     PoolName: userPoolName,
     AutoVerifiedAttributes: [
       'email'
+    ],
+    Schema: [
+      {
+        AttributeDataType: 'String',
+        Name: 'email',
+        Required: true
+      },
+      {
+        AttributeDataType: 'String',
+        Name: 'family_name',
+        Required: true
+      },
+      {
+        AttributeDataType: 'String',
+        Name: 'given_name',
+        Required: true
+      }
     ]
   };
   return new Promise((resolve, reject) => {
@@ -33,7 +51,7 @@ function createUserPool() {
       logger.info('Created Cognito User Pool', params.PoolName);
       resolve(data);
     });
-  }).then(createUserPoolClientsV2);
+  }).then(createUserPoolClients);
 }
 
 function safeCreateUserPool() {
@@ -41,7 +59,7 @@ function safeCreateUserPool() {
     MaxResults: 60
   };
   return new Promise((resolve, reject) => {
-    userPools.listUserPools(listUserPoolsParams, function (err, data) {
+    userPools.listUserPools(listUserPoolsParams, (err, data) => {
       if (err) {
         reject(err);
       }
@@ -63,7 +81,7 @@ function safeCreateUserPool() {
 
 function createUserPoolClient(params) {
   return new Promise((resolve, reject) => {
-    userPools.createUserPoolClient(params, function (err, data) {
+    userPools.createUserPoolClient(params, (err, data) => {
       if (err) {
         if (err.code === 'ResourceConflictException') {
           resolve('User pool client ' + params.ClientName + ' already exists');
@@ -79,12 +97,12 @@ function createUserPoolClient(params) {
   });
 }
 
-function createUserPoolClientsV2(data) {
+function createUserPoolClients(data) {
   return new Promise((resolve, reject) => {
     let userPoolId = data.UserPool.Id;
 
-    let appConfigParameters = {
-      ClientName: userPoolClientName,
+    let adminClientParams = {
+      ClientName: userPoolAdminClientName,
       UserPoolId: userPoolId,
       ExplicitAuthFlows: [
         'ADMIN_NO_SRP_AUTH'
@@ -111,6 +129,7 @@ function createUserPoolClientsV2(data) {
         'updated_at',
         'website'
       ],
+      RefreshTokenValidity: 1,
       WriteAttributes: [
         'address',
         'birthdate',
@@ -132,15 +151,63 @@ function createUserPoolClientsV2(data) {
       ]
     };
 
-    createUserPoolClient(appConfigParameters).then(() => {
+    // Localhost callback below is only included for demo and development purposes
+    // For production use, only HTTPS (or custom URI scheme for mobile) callbacks should be used
+    // Best practice is to have separate app clients for admin operations (adding to groups, no SRP, etc.) vs. regular client interactions, as well as development vs. production.
+    let appClientParams = {
+      ClientName: userPoolAppClientName,
+      UserPoolId: userPoolId,
+      AllowedOAuthFlows: [
+        'code'
+      ],
+      AllowedOAuthFlowsUserPoolClient: true,
+      AllowedOAuthScopes: [
+        'email',
+        'openid',
+        'profile'
+      ],
+      CallbackURLs: [
+        'http://localhost:8100',
+        'spacefinder://callback'
+      ],
+      DefaultRedirectURI: 'http://localhost:8100',
+      GenerateSecret: false,
+      LogoutURLs: [],
+      ReadAttributes: [
+        'email',
+        'email_verified',
+        'family_name',
+        'given_name',
+        'name',
+        'preferred_username',
+        'updated_at',
+      ],
+      RefreshTokenValidity: 30,
+      SupportedIdentityProviders: [
+        'COGNITO'
+      ],
+      WriteAttributes: [
+        'email',
+        'family_name',
+        'given_name',
+        'name',
+        'preferred_username',
+        'updated_at'
+      ]
+    };
+
+    createUserPoolClient(appClientParams).then(() => {
       // Create admin client after app client successfully created
-      resolve('Created user pool client successfully');
+      createUserPoolClient(adminClientParams).then(() => {
+        resolve(createUserPoolDomain(userPoolId));
+      }).catch((err) => {
+        reject(err);
+      });
     }).catch((err) => {
       reject(err);
     });
   });
 }
-
 
 function getUserPoolId() {
   let listUserPoolsParams = {
@@ -152,11 +219,16 @@ function getUserPoolId() {
         reject(err);
         return;
       }
+      let found = false;
       for (let i = 0; i < data.UserPools.length; i++) {
         // Loop through user pools to find desired user pool and return Id
         if (data.UserPools[i].Name === userPoolName) {
           resolve(data.UserPools[i].Id);
+          found = true;
         }
+      }
+      if (!found) {
+        reject(new Error(`Could not find userPool ${userPoolName}`));
       }
     });
   });
@@ -173,18 +245,22 @@ function getUserPoolClientId(userPoolClientName, userPoolId) {
         reject(err);
         return;
       }
+      let found = false;
       for (let i = 0; i < data.UserPoolClients.length; i++) {
         // Loop through user pools to find desired user pool and return Id
         if (data.UserPoolClients[i].ClientName === userPoolClientName) {
           resolve(data.UserPoolClients[i].ClientId);
+          found = true;
         }
+      }
+      if (!found) {
+        reject(new Error(`Could not find userPool ${userPoolClientName}`));
       }
     });
   });
 }
 
-
-function createIdentityPoolV2() {
+function createIdentityPool() {
   return new Promise((resolve, reject) => {
     getUserPoolId().then((userPoolId) => {
       let listUserPoolClientParams = {
@@ -199,7 +275,7 @@ function createIdentityPoolV2() {
         let userPoolClientIds = [];
         for (let i = 0; i < data.UserPoolClients.length; i++) {
           // Loop through user pool clients to find desired user pool client and return Id
-          if (data.UserPoolClients[i].ClientName === userPoolClientName) {
+          if (data.UserPoolClients[i].ClientName === userPoolAppClientName || data.UserPoolClients[i].ClientName === userPoolAdminClientName) {
             userPoolClientIds.push(data.UserPoolClients[i].ClientId);
           }
         }
@@ -213,7 +289,6 @@ function createIdentityPoolV2() {
     });
   });
 }
-
 
 function createIdentityPoolImpl(userPoolId, userPoolClientIds) {
   let cognitoIdentityProviders = [];
@@ -267,7 +342,7 @@ function safeCreateIdentityPool() {
       }
 
       // No name match found. Create new user pool
-      resolve(createIdentityPoolV2());
+      resolve(createIdentityPool());
     });
   });
 }
@@ -296,15 +371,16 @@ function getIdentityPoolId() {
 
 function setIdentityPoolRoles(userPoolId, userPoolClientIds) {
   return cf.getStackOutputs().then((cfOutputs) => {
-    let cognitoAuthAdminRoleArn = cfOutputs.CognitoIdentityPoolAuthAdminRoleArn;
     let cognitoAuthStandardRoleArn = cfOutputs.CognitoIdentityPoolAuthStandardRoleArn;
     let cognitoUnAuthRoleArn = cfOutputs.CognitoIdentityPoolUnAuthRoleArn;
     return getIdentityPoolId().then((identityPoolId) => {
       let userPoolRoleMappings = {};
-      userPoolRoleMappings['cognito-idp.' + config.AWS_REGION + '.amazonaws.com/' + userPoolId + ':' + userPoolClientIds[0]] = {
+      for (let i = 0; i < userPoolClientIds.length; i++) {
+        userPoolRoleMappings['cognito-idp.' + config.AWS_REGION + '.amazonaws.com/' + userPoolId + ':' + userPoolClientIds[i]] = {
           Type: 'Token',
           AmbiguousRoleResolution: 'AuthenticatedRole'
-      };
+        };
+      }
       let params = {
         IdentityPoolId: identityPoolId,
         Roles: {
@@ -346,11 +422,13 @@ function deleteUserPool() {
     let params = {
       UserPoolId: userPoolId
     };
-    userPools.deleteUserPool(params, function (err, data) {
-      if (err) {
-        throw (new Error(err));
-      }
-      return (data);
+    return deleteUserPoolDomain(userPoolId).then(() => {
+      userPools.deleteUserPool(params, function (err, data) {
+        if (err) {
+          throw (new Error(err));
+        }
+        return (data);
+      });
     });
   });
 }
@@ -365,9 +443,9 @@ function adminCreateGroup(group) {
   return getUserPoolId().then((userPoolId) => {
     return cf.getStackOutputs().then((cfOutputs) => {
       let roleArns = {};
-      roleArns['cognitoAuthAdminRoleArn'] = cfOutputs.CognitoIdentityPoolAuthAdminRoleArn;
-      roleArns['cognitoAuthStandardRoleArn'] = cfOutputs.CognitoIdentityPoolAuthStandardRoleArn;
-      roleArns['cognitoUnAuthRoleArn'] = cfOutputs.CognitoIdentityPoolUnAuthRoleArn;
+      roleArns.cognitoAuthAdminRoleArn = cfOutputs.CognitoIdentityPoolAuthAdminRoleArn;
+      roleArns.cognitoAuthStandardRoleArn = cfOutputs.CognitoIdentityPoolAuthStandardRoleArn;
+      roleArns.cognitoUnAuthRoleArn = cfOutputs.CognitoIdentityPoolUnAuthRoleArn;
 
       logger.info('Incoming request to crate group %s', group.name);
       let listParams = {
@@ -404,8 +482,6 @@ function adminCreateGroup(group) {
 }
 
 function adminCreateUser(userData) {
-
-
   return getUserPoolId().then((userPoolId) => {
     let createUserParams = {
       UserPoolId: userPoolId,
@@ -427,16 +503,13 @@ function adminCreateUser(userData) {
         }
       ]
     };
-
     let listUserParams = {
       UserPoolId: userPoolId
-    }
-
+    };
     userPools.listUsers(listUserParams, function (err, listUsersData) {
       if (err) {
         throw (new Error(err));
       }
-
       for (let poolUserIndex in listUsersData.Users) {
         if (listUsersData.Users[poolUserIndex].Username === userData.username) {
           logger.info('User %s already exists, ignoring', userData.username);
@@ -449,9 +522,7 @@ function adminCreateUser(userData) {
         }
         return initialChangePassword(userData);
       });
-
     });
-
   });
 }
 
@@ -471,11 +542,10 @@ function adminAssignUserToGroup(user, group) {
   });
 }
 
-
 function initialChangePassword(userData) {
   return new Promise((resolve, reject) => {
     getUserPoolId().then((userPoolId) => {
-      getUserPoolClientId(userPoolClientName, userPoolId).then((userPoolClientId) => {
+      getUserPoolClientId(userPoolAdminClientName, userPoolId).then((userPoolClientId) => {
         let adminInitiateAuthParams = {
           AuthFlow: 'ADMIN_NO_SRP_AUTH',
           ClientId: userPoolClientId,
@@ -516,7 +586,7 @@ function initialChangePassword(userData) {
 function getIdentityPoolUserId(userData) {
   return new Promise((resolve, reject) => {
     getUserPoolId().then((userPoolId) => {
-      getUserPoolClientId(userPoolClientName, userPoolId).then((userPoolClientId) => {
+      getUserPoolClientId(userPoolAdminClientName, userPoolId).then((userPoolClientId) => {
         let adminInitiateAuthParams = {
           AuthFlow: 'ADMIN_NO_SRP_AUTH',
           ClientId: userPoolClientId,
@@ -555,6 +625,72 @@ function getIdentityPoolUserId(userData) {
   })
 }
 
+function createUserPoolDomain(userPoolId) {
+  return getUserPoolDomainPrefix().then((userPoolDomain) => {
+    let params = {
+      Domain: userPoolDomain,
+      UserPoolId: userPoolId
+    };
+    return new Promise((resolve, reject) => {
+      userPools.createUserPoolDomain(params, function (err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        logger.info('Created Cognito User Pool Domain', params.Domain);
+        resolve('Created user pool successfully');
+      });
+    });
+  });
+}
+
+function getUserPoolDomainPrefix() {
+  return getUserPoolId().then((userPoolId) => {
+    // Convert user pool ID string suffix to lower case letters, numbers, and hypens only (replacing underscore character)
+    return config.getName(userPoolId).toLowerCase().replace('_','-');
+  });
+}
+
+function getUserPoolDomainName() {
+  return getUserPoolDomainPrefix().then((userPoolDomainPrefix) => {
+    return userPoolDomainPrefix + '.auth.' + config.AWS_REGION + '.amazoncognito.com';
+  });
+}
+
+function deleteUserPoolDomain(userPoolId) {
+  return getUserPoolDomainPrefix().then((userPoolDomain) => {
+    let params = {
+      Domain: userPoolDomain,
+      UserPoolId: userPoolId
+    };
+    return new Promise((resolve, reject) => {
+      userPools.deleteUserPoolDomain(params, function (err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve('Deleted Cognito User Pool Domain');
+      });
+    });
+  });
+}
+
+function deleteUserPool() {
+  return getUserPoolId().then((userPoolId) => {
+    let params = {
+      UserPoolId: userPoolId
+    };
+    return deleteUserPoolDomain(userPoolId).then(() => {
+      userPools.deleteUserPool(params, function (err, data) {
+        if (err) {
+          throw (new Error(err));
+        }
+        return (data);
+      });
+    });
+  });
+}
+
 function createCognitoPools() {
   return safeCreateUserPool().then(safeCreateIdentityPool);
 }
@@ -563,16 +699,17 @@ function deleteCognitoPools() {
   return deleteIdentityPool().then(deleteUserPool);
 }
 
-
 module.exports = {
+  adminAssignUserToGroup,
   adminCreateUser,
+  adminCreateGroup,
   createCognitoPools,
   deleteCognitoPools,
   getIdentityPoolId,
   getIdentityPoolUserId,
   getUserPoolId,
   getUserPoolClientId,
-  adminCreateGroup,
-  adminAssignUserToGroup,
-  userPoolClientName
+  getUserPoolDomainName,
+  getUserPoolDomainPrefix,
+  userPoolAppClientName
 };

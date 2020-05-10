@@ -6,7 +6,6 @@ import { GlobalStateService } from '../../services/global-state.service';
 import { AccountForgotPasswordPage } from '../account-forgot-password/account-forgot-password';
 import { AccountSignupPage } from '../account-signup/account-signup';
 // import { WelcomePage } from '../welcome/welcome';
-import { AccountSigninUsingSAMLPage } from '../account-signin-using-saml/account-signin-using-saml';
 import {
   UserLoginService, IUserLogin, UserState,
   UserRegistrationService, CognitoUtil
@@ -23,7 +22,6 @@ export class AccountSigninPage {
   allowButtonPresses = true; // to prevent multiple clicks
   accountSignupPage = AccountSignupPage;
   accountForgotPasswordPage = AccountForgotPasswordPage;
-  accountSigninUsingSAMLPage = AccountSigninUsingSAMLPage;
   tabsPage = TabsPage;
   alertCtrl : AlertController = this.globals.getAlertController();
 
@@ -84,22 +82,24 @@ export class AccountSigninPage {
       return;
     }
     this.allowButtonPresses = false;
-    this.globals.displayLoader('Signing in...');
-    UserLoginService.signIn(this.userData)
-    .then(() => {
-      // Login was successful
-      this.globals.dismissLoader();
-      this.showLoginSuccessAlert(this.userData.username, () => {
-        this.globals.userId = this.globals.getUserId();
-        this.globals.setViewAdminFeaturesOverride(this.globals.isAdminRole());
-        this.navCtrl.popToRoot({animate: false});
-        // this.navCtrl.push(WelcomePage);
+    this.globals.displayLoader('Signing in...').then(() => {
+      UserLoginService.signIn(this.userData)
+      .then(() => {
+        // Login was successful
+        return this.globals.dismissLoader().then(() => {
+          return this.showLoginSuccessAlert(this.userData.username, () => {
+            this.globals.userId = this.globals.getUserId();
+            this.globals.setViewAdminFeaturesOverride(this.globals.isAdminRole());
+            this.navCtrl.popToRoot({animate: false});
+            // this.navCtrl.push(WelcomePage);
+          });
+        });
+      }).catch((err: Error): void => {
+        // Login was unsuccessful
+        this.globals.dismissLoader();
+        this.allowButtonPresses = true;
+        this.displayAlertError(err);
       });
-    }).catch((err: Error): void => {
-      // Login was unsuccessful
-      this.globals.dismissLoader();
-      this.allowButtonPresses = true;
-      this.displayAlertError(err);
     });
   }
 
@@ -130,7 +130,7 @@ export class AccountSigninPage {
   showLoginSuccessAlert(username: String, callbackHandler: () => void): void {
     let subtitle = `You are now signed in.`;
     if (this.globals.isAdminRole()) {
-      subtitle = `You are now signed as an Administrator.`
+      subtitle = `You are now signed in as an Administrator.`
     }
     let alert = this.alertCtrl.create({
       title: 'Success!',
@@ -143,7 +143,10 @@ export class AccountSigninPage {
           }
         }]
     });
-    alert.present();
+    alert.present().then(() => {
+    }).catch((ex) => {
+      console.log('Display alert exception', ex);
+    });;
   }
 
   showResendSuccessAlert(callbackHandler: () => void): void {
@@ -155,7 +158,10 @@ export class AccountSigninPage {
         handler: data => { callbackHandler(); }
       }]
     });
-    alert.present();
+    alert.present().then(() => {
+    }).catch((ex) => {
+      console.log('Display alert exception', ex);
+    });
   }
 
   showOneTimeVerificationAlert(username: String, callbackHandler: () => void): void {
@@ -204,7 +210,10 @@ export class AccountSigninPage {
         { text: 'Cancel' },
         ]
     });
-    alert.present();
+    alert.present().then(() => {
+    }).catch((ex) => {
+      console.log('Display alert exception', ex);
+    });
   }
 
   showConfirmationFailureAlert(err: Error): void {
@@ -213,7 +222,10 @@ export class AccountSigninPage {
       subTitle: err.message,
       buttons: [{ text: 'OK' }]
     });
-    alert.present();
+    alert.present().then(() => {
+    }).catch((ex) => {
+      console.log('Display alert exception', ex);
+    });
   }
 
 
@@ -223,7 +235,10 @@ export class AccountSigninPage {
       subTitle: `${message}`,
       buttons: [{ text: 'OK' }]
     });
-    alert.present();
+    alert.present().then(() => {
+    }).catch((ex) => {
+      console.log('Display alert exception', ex);
+    });
   }
 
   showForgotPasswordFailureAlert(err): void {
@@ -232,7 +247,10 @@ export class AccountSigninPage {
       subTitle: `An error was encountered when attempting to initiate the password change process: [${err}]. Please try again.`,
       buttons: [{ text: 'OK' }]
     });
-    alert.present();
+    alert.present().then(() => {
+    }).catch((ex) => {
+      console.log('Display alert exception', ex);
+    });
   }
 
   constructor(public navCtrl: NavController, private globals: GlobalStateService) {

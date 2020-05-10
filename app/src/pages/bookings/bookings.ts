@@ -126,7 +126,7 @@ export class BookingsPage {
     // each time a new date is encountered.
     let currentDateString = null;
     let bookingsSoFar = [];
-    bookings.push({startTimeEpochTime: 0});
+    // bookings.push({locationId: null, resourceId: null, userId: null, startTimeEpochTime: 0});
 
     for (let i=0; i<bookings.length; i++) {
       let booking = bookings[i];
@@ -146,8 +146,14 @@ export class BookingsPage {
         // ...and start with a fresh array
         currentDateString = dateString;
         bookingsSoFar = [booking];
-
       }
+    }
+    if (bookingsSoFar.length > 0) {
+      let b = {
+        "date": currentDateString,
+        "bookings": bookingsSoFar.slice(0) // clone the array
+      };
+      result.push(b);
     }
     return result;
   }

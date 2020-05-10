@@ -54,17 +54,15 @@ The mobile app is a hybrid mobile app, and is built on the [Ionic2 framework], w
 The application framework relies on [Node.js] and [npm]. It also uses [Apache Cordova] plugins to support certain native functionality on mobile devices.
 
     # install Ionic2 CLI, Cordova, and Bower tools
-    npm install -g ionic@2.2.1 cordova@6.5.0 bower
+    npm install -g ionic cordova bower
     
     # install the Node modules 
     cd aws-serverless-auth-reference-app/app
     npm install
 
     # install Cordova platform components if you would like to build the app for mobile
-    cordova platform remove android
-    cordova platform remove ios
-    cordova platform add android@5.X.X
-    cordova platform add ios@4.X.X
+    cordova platform add android
+    cordova platform add ios
     
 ### Running the app
 
@@ -81,11 +79,11 @@ This useful for development purposes. If prompted for address/port to bind to, c
 You can run the app in an actual Android mobile device, or in an Android emulator. The following command generates
 an Android APK file, and run it in an Android emulator. Note that this requires previous installation of the Android SDK and existence of the ANDROID_HOME environmental variable.
 
-    ionic run android
+    ionic cordova run android
 
 Alternatively, to generate just the Android APK file, which can then be loaded onto an Android device:
 
-    ionic build android
+    ionic cordova build android
 
 Remote debug live content on an Android device from your Windows, Mac, or Linux computer,
 using [Chrome's remote debugger tool], and visiting `chrome://inspect` in your Chrome browser.
@@ -93,7 +91,7 @@ There are also third-party tools such as [Vysor] which can allow you to view you
 
 #### Run in an Apple iOS emulator
 
-    ionic run ios
+    ionic cordova run ios
     
  ----
     

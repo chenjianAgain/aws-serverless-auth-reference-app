@@ -5,7 +5,7 @@ import { AccountSignupPage } from '../account-signup/account-signup';
 import { AccountChangePasswordPage } from '../account-change-password/account-change-password';
 import { LocationAddPage } from '../location-add/location-add';
 import { GlobalStateService } from '../../services/global-state.service';
-import { ImagePicker } from 'ionic-native';
+import { ImagePicker } from '@ionic-native/image-picker';
 import { UserLoginService } from '../../services/account-management.service';
 import { Config } from '../../config/config'
 import { Logger } from '../../services/logger.service';
@@ -34,15 +34,15 @@ export class AccountPage {
     this.globals.setViewAdminFeaturesOverride(this.viewAdminFeatures);
   }
   // code from: http://stackoverflow.com/questions/29644474/how-to-be-able-to-convert-image-to-base64-and-avoid-same-origin-policy
-  convertImgToBase64URL(url, callback, outputFormat) {
+  convertImgToBase64URL(url, options, callback, outputFormat) {
     let img = new Image();
     img.crossOrigin = 'Anonymous';
     img.onload = function () {
       let canvas = document.createElement('CANVAS');
       let cvs = (<any>canvas);
       let ctx = cvs.getContext('2d');
-      cvs.height = this.height;
-      cvs.width = this.width;
+      cvs.height = options.height;
+      cvs.width = options.width;
       ctx.drawImage(this, 0, 0);
       let dataURL = cvs.toDataURL(outputFormat);
       callback(dataURL);
@@ -136,14 +136,15 @@ export class AccountPage {
         quality: 100
       }
       // code adapted from: http://blog.ionic.io/ionic-native-accessing-ios-photos-and-android-gallery-part-2/
-      ImagePicker.getPictures(options)
+
+      new ImagePicker().getPictures(options)
       .then(
         file_uris => {
           try {
             if (file_uris !== null && file_uris !== '' && (file_uris.length > 0)) {
               console.log(`Image selected: [${file_uris}]`);
               console.log(`Converting to Base64 image`);
-              this.convertImgToBase64URL(file_uris[0], base64Img=>{
+              this.convertImgToBase64URL(file_uris[0], options,base64Img=>{
                 // console.log(base64Img);
                 console.log('Converting to Blob');
                 let blob = this.dataURItoBlob(base64Img);
